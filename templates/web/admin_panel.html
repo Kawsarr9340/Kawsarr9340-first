@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+  <title>KH-CORE | Admin Authority</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;500;700;800&display=swap');
+    
+    :root {
+      --bg: #000000;
+      --card: rgba(28, 28, 30, 0.7);
+      --accent: #ff3b30; 
+      --blue: #007aff;   
+      --green: #34c759;  
+      --orange: #ff9f0a;
+      --border: rgba(255, 255, 255, 0.1);
+      --glass: blur(25px) saturate(180%);
+    }
+
+    body {
+      background: var(--bg); color: #fff; font-family: 'Plus Jakarta Sans', sans-serif;
+      margin: 0; padding-bottom: 50px;
+    }
+
+    .navbar {
+      background: rgba(0, 0, 0, 0.5); backdrop-filter: var(--glass);
+      border-bottom: 0.5px solid var(--border); padding: 15px 20px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; z-index: 1000;
+    }
+
+    .container { max-width: 800px; margin: auto; padding: 20px; }
+
+    /* --- Monitor Screen --- */
+    .monitor-grid { 
+      display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 25px; 
+    }
+    .stat-pill {
+      background: var(--card); border: 0.5px solid var(--border);
+      padding: 15px; border-radius: 20px;
+    }
+    .stat-label { font-size: 10px; color: #8e8e93; font-weight: 700; text-transform: uppercase; }
+    .stat-value { font-size: 18px; font-weight: 800; display: block; margin-top: 4px; }
+    
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .dot-online { background: var(--green); box-shadow: 0 0 10px var(--green); animation: pulse 2s infinite; }
+    .dot-offline { background: var(--accent); }
+    .dot-suspended { background: var(--orange); }
+
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+    /* --- User Cards --- */
+    .user-card {
+      background: var(--card); border-radius: 22px; padding: 18px;
+      margin-bottom: 15px; border: 0.5px solid var(--border);
+    }
+    .u-top { display: flex; align-items: center; gap: 15px; }
+    .u-avatar {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: linear-gradient(135deg, #1c1c1e, #2c2c2e);
+      display: flex; align-items: center; justify-content: center; font-weight: 800;
+    }
+
+    .badge-row { margin-top: 8px; display: flex; gap: 5px; }
+    .ios-badge {
+      font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
+    }
+    .badge-limit { background: rgba(0, 122, 255, 0.1); color: var(--blue); }
+    .badge-active { background: rgba(52, 199, 89, 0.1); color: var(--green); }
+    .badge-banned { background: rgba(255, 59, 48, 0.1); color: var(--accent); }
+
+    .actions {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+      margin-top: 15px; border-top: 0.5px solid var(--border); padding-top: 15px;
+    }
+    .ios-btn {
+      background: rgba(255,255,255,0.05); border: none; border-radius: 12px;
+      padding: 10px 0; color: #fff; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .ios-btn span { font-size: 9px; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div style="font-weight:800; font-size:18px;">KH Authority</div>
+  <button class="ios-btn" style="flex-direction:row; padding:8px 15px; background:var(--blue); border-radius:20px;" onclick="createUser()">
+    <i class="fa-solid fa-plus"></i> <span style="margin-left:5px;">New Identity</span>
+  </button>
+</nav>
+
+<div class="container">
+  <div class="monitor-grid">
+    <div class="stat-pill">
+      <span class="stat-label">Active Nodes</span>
+      <span class="stat-value"><span class="dot dot-online"></span> <span id="onlineCount">0</span> Online</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-label">Total Servers</span>
+      <span class="stat-value" id="totalSrvCount">0</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-label">Suspended</span>
+      <span class="stat-value"><span class="dot dot-suspended"></span> <span id="suspendedCount">0</span> Users</span>
+    </div>
+    <div class="stat-pill">
+      <span class="stat-label">CPU Usage</span>
+      <span class="stat-value" id="cpuVal">0%</span>
+    </div>
+  </div>
+
+  <div id="userList"></div>
+</div>
+
+<script>
+async function loadData() {
+    try {
+        const r = await fetch('/admin/stats');
+        const d = await r.json();
+        
+        document.getElementById('cpuVal').innerText = d.sys_cpu || "0%";
+        
+        let totalSrv = 0;
+        let onlineSrv = 0;
+        let bannedUsers = 0;
+
+        const list = document.getElementById('userList');
+        list.innerHTML = d.users.map(u => {
+            totalSrv += u.srv_count;
+            onlineSrv += u.active_srvs;
+            if(u.status === 'banned') bannedUsers++;
+
+            // FIX: server_limit undefined check based on your __init__.py
+            const limit = u.server_limit !== undefined ? u.server_limit : 1;
+
+            return `
+            <div class="user-card animate__animated animate__fadeIn">
+                <div class="u-top">
+                    <div class="u-avatar">${u.fname[0]}</div>
+                    <div style="flex:1">
+                        <h4 style="margin:0;">${u.fname}</h4>
+                        <div class="badge-row">
+                            <span class="ios-badge badge-limit">Limit: ${limit}</span>
+                            <span class="ios-badge ${u.status === 'active' ? 'badge-active' : 'badge-banned'}">${u.status}</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right; font-size:11px; font-weight:700;">
+                        <div style="color:var(--green)">${u.active_srvs} ON</div>
+                        <div style="color:#8e8e93">${u.srv_count} TOTAL</div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="ios-btn" onclick="editPermissions(${u.id}, '${u.role}', ${limit}, '${u.status}')">
+                        <i class="fa-solid fa-sliders"></i><span>Limit</span>
+                    </button>
+                    
+                    ${u.status === 'active' ? 
+                        `<button class="ios-btn" style="color:var(--accent)" onclick="toggleBan(${u.id}, 'banned')">
+                            <i class="fa-solid fa-user-slash"></i><span>Ban</span>
+                        </button>` : 
+                        `<button class="ios-btn" style="color:var(--green)" onclick="toggleBan(${u.id}, 'active')">
+                            <i class="fa-solid fa-user-check"></i><span>Unban</span>
+                        </button>`
+                    }
+
+                    <button class="ios-btn" onclick="location.href='/admin/manage-user/${u.id}'">
+                        <i class="fa-solid fa-server"></i><span>Manage</span>
+                    </button>
+                    <button class="ios-btn" style="color:var(--accent)" onclick="deleteUser(${u.id})">
+                        <i class="fa-solid fa-trash"></i><span>Purge</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+
+        document.getElementById('onlineCount').innerText = onlineSrv;
+        document.getElementById('totalSrvCount').innerText = totalSrv;
+        document.getElementById('suspendedCount').innerText = bannedUsers;
+
+    } catch(e) { console.error("Sync Error"); }
+}
+
+async function toggleBan(id, newStatus) {
+    await fetch('/admin/user/update', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ user_id: id, status: newStatus, role: 'free', limit: 1 }) 
+    });
+    loadData();
+}
+
+async function editPermissions(id, role, limit, status) {
+    const { value: form } = await Swal.fire({
+        title: 'Modify Permissions',
+        background: '#1c1c1e', color: '#fff',
+        html: `
+            <input id="sw-limit" type="number" class="swal2-input" value="${limit}" style="background:#2c2c2e; color:white; border-radius:10px;">
+            <select id="sw-role" class="swal2-input" style="background:#2c2c2e; color:white; border-radius:10px;">
+                <option value="free" ${role==='free'?'selected':''}>Free</option>
+                <option value="premium" ${role==='premium'?'selected':''}>Premium</option>
+            </select>
+        `,
+        preConfirm: () => ({
+            user_id: id,
+            limit: document.getElementById('sw-limit').value,
+            role: document.getElementById('sw-role').value,
+            status: status
+        })
+    });
+    if(form) {
+        await fetch('/admin/user/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(form)
+        });
+        loadData();
+    }
+}
+
+async function createUser() {
+    const { value: v } = await Swal.fire({
+        title: 'New Identity',
+        background: '#1c1c1e', color: '#fff',
+        html: `
+            <input id="n-name" class="swal2-input" placeholder="Full Name">
+            <input id="n-email" class="swal2-input" placeholder="Email Address">
+            <input id="n-pass" class="swal2-input" type="password" placeholder="Password">
+            <input id="n-limit" type="number" class="swal2-input" placeholder="Server Limit" value="1">
+        `,
+        preConfirm: () => ({
+            name: document.getElementById('n-name').value,
+            email: document.getElementById('n-email').value,
+            pass: document.getElementById('n-pass').value,
+            limit: document.getElementById('n-limit').value
+        })
+    });
+    if(v) {
+        await fetch('/admin/create-user', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify(v) 
+        });
+        loadData();
+    }
+}
+
+async function deleteUser(id) {
+    const res = await Swal.fire({ title: 'Purge User?', icon: 'warning', background: '#1c1c1e', color: '#fff', showCancelButton: true });
+    if(res.isConfirmed) {
+        await fetch(`/admin/delete-user/${id}`, { method: 'POST' });
+        loadData();
+    }
+}
+
+setInterval(loadData, 5000);
+loadData();
+</script>
+
+<!-- AUTO_ADMIN_PATCH_START -->
+<style>
+#smtp-control-fab {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 99990;
+    background: linear-gradient(135deg, #6366f1, #4f46e5);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 13px 20px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(79, 70, 229, 0.5);
+    font-family: sans-serif;
+}
+#smtp-control-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(6px);
+    z-index: 99999;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    font-family: sans-serif;
+}
+#smtp-control-card {
+    background: #111827;
+    color: #f9fafb;
+    width: 100%;
+    max-width: 460px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-radius: 16px;
+    padding: 22px;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+#smtp-control-card h3 { margin: 0 0 14px 0; font-size: 19px; color: #fff; text-align: center; }
+.smtp-switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #1f2937;
+    padding: 11px 14px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    border: 1px solid #374151;
+}
+.smtp-switch-row span { font-size: 13px; font-weight: 600; color: #e5e7eb; }
+.smtp-inp-group { margin-bottom: 11px; }
+.smtp-inp-group label { display: block; font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+.smtp-inp-group input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid #374151;
+    background: #1f2937;
+    color: #fff;
+    font-size: 13px;
+}
+.smtp-action-row { display: flex; gap: 8px; margin-top: 14px; }
+.smtp-act-btn {
+    flex: 1;
+    padding: 11px;
+    border: none;
+    border-radius: 9px;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    color: #fff;
+}
+#smtp-alert-box {
+    display: none;
+    padding: 9px;
+    border-radius: 8px;
+    font-size: 12px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+</style>
+
+<button type="button" id="smtp-control-fab">⚙️ SMTP & Verification ON/OFF</button>
+
+<div id="smtp-control-modal">
+    <div id="smtp-control-card">
+        <h3>⚙️ SMTP & Verification Control</h3>
+        <div id="smtp-alert-box"></div>
+
+        <div class="smtp-switch-row">
+            <span>📧 Master SMTP Email System (ON / OFF)</span>
+            <input type="checkbox" id="sw-smtp-enabled" style="width:20px;height:20px;cursor:pointer;" />
+        </div>
+
+        <div class="smtp-switch-row">
+            <span>✅ Account OTP Verification (ON / OFF)</span>
+            <input type="checkbox" id="sw-verify-enabled" style="width:20px;height:20px;cursor:pointer;" />
+        </div>
+
+        <div class="smtp-switch-row">
+            <span>🔔 Server Create & Delete Email (ON / OFF)</span>
+            <input type="checkbox" id="sw-notify-enabled" style="width:20px;height:20px;cursor:pointer;" />
+        </div>
+
+        <div class="smtp-inp-group">
+            <label>SMTP Host (Default: smtp.gmail.com)</label>
+            <input type="text" id="inp-smtp-host" placeholder="smtp.gmail.com" />
+        </div>
+        <div class="smtp-inp-group">
+            <label>SMTP Port (Default: 587)</label>
+            <input type="number" id="inp-smtp-port" placeholder="587" />
+        </div>
+        <div class="smtp-inp-group">
+            <label>Sender Name</label>
+            <input type="text" id="inp-sender-name" placeholder="Hosting Panel" />
+        </div>
+        <div class="smtp-inp-group">
+            <label>Sender Gmail Address</label>
+            <input type="email" id="inp-smtp-user" placeholder="yourgmail@gmail.com" />
+        </div>
+        <div class="smtp-inp-group">
+            <label>Gmail App Password (16-Digit)</label>
+            <input type="password" id="inp-smtp-pass" placeholder="xxxx xxxx xxxx xxxx" />
+        </div>
+
+        <div class="smtp-action-row">
+            <button type="button" class="smtp-act-btn" id="btn-smtp-save" style="background:#10b981;">Save</button>
+            <button type="button" class="smtp-act-btn" id="btn-smtp-test" style="background:#3b82f6;">Test Email</button>
+            <button type="button" class="smtp-act-btn" id="btn-smtp-close" style="background:#4b5563;">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const fab = document.getElementById("smtp-control-fab");
+    const modal = document.getElementById("smtp-control-modal");
+    const alertBox = document.getElementById("smtp-alert-box");
+
+    function showAlert(txt, ok) {
+        alertBox.style.display = "block";
+        alertBox.style.background = ok ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)";
+        alertBox.style.color = ok ? "#34d399" : "#f87171";
+        alertBox.innerText = txt;
+    }
+
+    async function loadCfg() {
+        alertBox.style.display = "none";
+        try {
+            const r = await fetch("/api/smtp_settings");
+            const d = await r.json();
+            document.getElementById("sw-smtp-enabled").checked = d.smtp_enabled !== false;
+            document.getElementById("sw-verify-enabled").checked = !!d.verification_enabled;
+            document.getElementById("sw-notify-enabled").checked = !!d.server_notify_enabled;
+            document.getElementById("inp-smtp-host").value = d.smtp_host || "smtp.gmail.com";
+            document.getElementById("inp-smtp-port").value = d.smtp_port || 587;
+            document.getElementById("inp-sender-name").value = d.sender_name || "Hosting Panel";
+            document.getElementById("inp-smtp-user").value = d.smtp_user || "";
+            document.getElementById("inp-smtp-pass").value = d.smtp_pass || "";
+        } catch (e) {}
+    }
+
+    fab.addEventListener("click", function() { loadCfg(); modal.style.display = "flex"; });
+    document.getElementById("btn-smtp-close").addEventListener("click", function() { modal.style.display = "none"; });
+
+    document.getElementById("btn-smtp-save").addEventListener("click", async function() {
+        const payload = {
+            smtp_enabled: document.getElementById("sw-smtp-enabled").checked,
+            verification_enabled: document.getElementById("sw-verify-enabled").checked,
+            server_notify_enabled: document.getElementById("sw-notify-enabled").checked,
+            smtp_host: document.getElementById("inp-smtp-host").value.trim(),
+            smtp_port: parseInt(document.getElementById("inp-smtp-port").value || "587"),
+            sender_name: document.getElementById("inp-sender-name").value.trim(),
+            smtp_user: document.getElementById("inp-smtp-user").value.trim(),
+            smtp_pass: document.getElementById("inp-smtp-pass").value.trim()
+        };
+        try {
+            const r = await fetch("/api/smtp_settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+            const d = await r.json();
+            showAlert(d.message || "Saved!", !!d.success);
+        } catch (e) {
+            showAlert("Save failed!", false);
+        }
+    });
+
+    document.getElementById("btn-smtp-test").addEventListener("click", async function() {
+        showAlert("Sending test email...", true);
+        try {
+            const r = await fetch("/api/test_smtp", { method: "POST" });
+            const d = await r.json();
+            showAlert(d.message, !!d.success);
+        } catch (e) {
+            showAlert("Test failed!", false);
+        }
+    });
+});
+</script>
+<!-- AUTO_ADMIN_PATCH_END -->
+
+</body>
+</html>
