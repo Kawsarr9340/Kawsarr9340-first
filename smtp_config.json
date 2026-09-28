@@ -1,0 +1,10 @@
+{
+    "smtp_enabled": false,
+    "verification_enabled": false,
+    "server_notify_enabled": false,
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_pass": "",
+    "sender_name": "Kawsar Hosting"
+}
