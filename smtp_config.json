@@ -1,0 +1,11 @@
+{
+    "smtp_enabled": false,
+    "verification_enabled": false,
+    "server_notify_enabled": false,
+    "resend_key": "re_DkCYv6fh_6UErJcseHYZuGfoHFP4W4rQ1",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 465,
+    "smtp_user": "opkaysaryt7@gmail.com",
+    "smtp_pass": "ctvdyrmparckoqwc",
+    "sender_name": "Kawsar Hosting"
+}
